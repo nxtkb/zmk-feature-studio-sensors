@@ -1,4 +1,4 @@
-# Pinned Studio transmit compatibility
+# Pinned Studio buffer compatibility
 
 2026-11-17. This is a local compatibility patch against official ZMK
 `4de313367288aad5aeaa1243890e40dc813f7008`; it is not an upstream submission.
@@ -44,3 +44,23 @@ The patched functions cover exact-full EOF, initially full-ring SOF, all escaped
 byte values, payload sizes 0–1024, several ring capacities and the BLE flush
 threshold. This tests production C functions, not a reimplementation of them.
 Actual BLE hardware retesting remains required after rebuilding and flashing.
+
+
+## Receive-side saturation found during the hardware retest
+
+The subsequent hardware run completed discovery but a larger SetBinding request
+received no response. No Save operation followed, and the write was not retried.
+The pinned BLE write callback can fill the 30-byte RX ring while copying one ATT
+write; its zero-space path spins without notifying the decoder until the entire
+write finishes. The cooperative Bluetooth receive thread can then starve the
+lower-priority RPC decoder that needs to free that space.
+
+The same compatibility patch now notifies the decoder and sleeps briefly on a
+zero-space claim before continuing the copy. It preserves all bytes and ordering
+without increasing the buffer or retrying a configuration operation.
+
+The host port compiles the actual `write_rpc_req()` as well. A 20-byte queued
+prefix plus another 20-byte ATT write reproduces the pinned producer's zero-space
+spin. The fixed callback retains all bytes for every starting occupancy 0–30 and
+incoming write length 0–128. The transmit negative control and boundary cases
+remain part of the same test; a fresh hardware retest is still required.

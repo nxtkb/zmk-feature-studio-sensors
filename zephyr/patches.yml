@@ -13,7 +13,7 @@ patches:
       Apply all manifest entries to official ZMK 4de31336/messages 6cb4c28.
       Enable explicitly with the studio-sensors-local snippet.
   - path: zmk/studio-rpc-tx-backpressure.patch
-    sha256sum: 66c8ea4f1bdcc20b9a904f4871545d12b6ba328a1de504e5740f46cad89949dc
+    sha256sum: 8ecf8d8a69aae82eb049d519fbb68886e4d303efd222d1bbdc759d6968fc80c5
     module: zmk
     author: NXTKB
     email: sky_io@outlook.com

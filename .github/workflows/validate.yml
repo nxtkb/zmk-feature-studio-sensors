@@ -43,7 +43,7 @@ jobs:
       - name: Prepare pinned Studio TX compatibility patch
         working-directory: _deps/zmk
         run: git apply ../../zephyr/patches/zmk/studio-rpc-tx-backpressure.patch
-      - name: Check actual Studio TX functions and pinned negative control
+      - name: Check actual Studio TX/RX functions and pinned negative controls
         run: python scripts/test_studio_tx.py --zmk _deps/zmk
       - name: Prepare local message integration
         working-directory: _deps/messages

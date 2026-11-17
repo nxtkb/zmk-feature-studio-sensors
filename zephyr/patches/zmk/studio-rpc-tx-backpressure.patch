@@ -1,8 +1,23 @@
 diff --git a/app/src/studio/gatt_rpc_transport.c b/app/src/studio/gatt_rpc_transport.c
-index dff18259..2e0c18db 100644
+index dff18259..41d435cd 100644
 --- a/app/src/studio/gatt_rpc_transport.c
 +++ b/app/src/studio/gatt_rpc_transport.c
-@@ -104,10 +104,12 @@ static uint16_t get_notify_size_for_conn(struct bt_conn *conn) {
+@@ -73,6 +73,14 @@ static ssize_t write_rpc_req(struct bt_conn *conn, const struct bt_gatt_attr *at
+         uint8_t *buffer;
+         uint32_t claim_len = ring_buf_put_claim(rpc_buf, &buffer, len - copied);
+ 
++        if (claim_len == 0) {
++            /* The cooperative Bluetooth RX thread must let the RPC decoder
++             * consume the bytes already queued before retrying this write. */
++            zmk_rpc_rx_notify();
++            k_msleep(1);
++            continue;
++        }
++
+         if (claim_len > 0) {
+             memcpy(buffer, ((uint8_t *)buf) + copied, claim_len);
+             copied += claim_len;
+@@ -104,10 +112,12 @@ static uint16_t get_notify_size_for_conn(struct bt_conn *conn) {
      return notify_size;
  }
  
@@ -16,7 +31,7 @@ index dff18259..2e0c18db 100644
      if (conn) {
          bt_conn_unref(conn);
      }
-@@ -126,7 +128,7 @@ static int gatt_stop_rx(void) {
+@@ -126,7 +136,7 @@ static int gatt_stop_rx(void) {
      return 0;
  }
  
@@ -25,7 +40,7 @@ index dff18259..2e0c18db 100644
  
  static void indicate_cb(struct bt_conn *conn, struct bt_gatt_indicate_params *params, uint8_t err);
  
-@@ -195,7 +197,7 @@ static void gatt_tx_notify(struct ring_buf *tx_buf, size_t added, bool msg_done,
+@@ -195,7 +205,7 @@ static void gatt_tx_notify(struct ring_buf *tx_buf, size_t added, bool msg_done,
  
      atomic_t ns = atomic_get(&notify_size);
  

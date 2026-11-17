@@ -56,8 +56,9 @@ The module can also report an empty sensor list. Optional board metadata uses
 `nxtkb,studio-sensors`; see the [trial guide](docs/local-trial.md).
 
 The manifest keeps the sensor-core integration, messages integration and pinned
-[Studio TX backpressure repair](docs/studio-tx-backpressure.md) as separate patches.
-The transport repair prevents a full TX ring from dropping response delimiters.
+[Studio buffer backpressure repair](docs/studio-tx-backpressure.md) as separate patches.
+The transport repair prevents a full TX ring from dropping response delimiters
+and a saturated RX producer from starving its decoder.
 
 ## Android trial
 

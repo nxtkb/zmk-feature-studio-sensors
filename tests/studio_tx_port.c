@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #define FRAMING_SOF 0xab
 #define FRAMING_ESC 0xac
 #define FRAMING_EOF 0xad
@@ -21,6 +22,10 @@ struct ring_buf {
     unsigned capacity, head, tail, used;
 };
 static struct ring_buf rpc_tx_buf;
+static struct ring_buf rpc_rx_buf;
+static uint8_t rx_output[1024];
+static unsigned rx_output_len, rx_stalls;
+static bool rx_notified;
 static uint8_t output[32768];
 static unsigned output_len, async_budget;
 static int rpc_transport_mutex;
@@ -34,6 +39,15 @@ static void drain(unsigned count) {
 }
 static void k_msleep(int delay) {
     (void)delay;
+    if (rx_notified) {
+        while (rpc_rx_buf.used) {
+            rx_output[rx_output_len++] = rpc_rx_buf.data[rpc_rx_buf.head++];
+            rpc_rx_buf.head %= rpc_rx_buf.capacity;
+            rpc_rx_buf.used--;
+        }
+        rx_notified = false;
+        rx_stalls = 0;
+    }
     drain(27);
 }
 static void k_mutex_lock(int *lock, int timeout) {
@@ -56,6 +70,10 @@ static uint32_t ring_buf_put(struct ring_buf *b, const uint8_t *p, uint32_t n) {
 }
 static uint32_t ring_buf_put_claim(struct ring_buf *b, uint8_t **p, uint32_t n) {
     *p = &b->data[b->tail];
+    if (b == &rpc_rx_buf && b->used == b->capacity && ++rx_stalls > 1000) {
+        fputs("RX producer spins without waking/yielding to decoder\n", stderr);
+        exit(3);
+    }
     return MIN(n, MIN(b->capacity - b->used, b->capacity - b->tail));
 }
 static void ring_buf_put_finish(struct ring_buf *b, unsigned n) {
@@ -101,6 +119,12 @@ typedef int atomic_t;
 struct bt_conn {
     int unused;
 };
+struct bt_gatt_attr {
+    int unused;
+};
+static bool handling_rx = true;
+static struct ring_buf *zmk_rpc_get_rx_buf(void) { return &rpc_rx_buf; }
+static void zmk_rpc_rx_notify(void) { rx_notified = true; }
 static struct bt_conn connection;
 static atomic_t notify_size;
 static unsigned submissions;
@@ -121,6 +145,24 @@ static void k_work_submit(int *work) {
     submissions++;
 }
 #include "native_gatt.inc"
+
+static void exercise_rx(unsigned prefilled, unsigned length) {
+    memset(&rpc_rx_buf, 0, sizeof(rpc_rx_buf));
+    rpc_rx_buf.capacity = 30;
+    rx_output_len = rx_stalls = 0;
+    rx_notified = false;
+    uint8_t expected[256], payload[128];
+    for (unsigned i = 0; i < prefilled; i++) {
+        expected[i] = 0x55;
+        assert(ring_buf_put(&rpc_rx_buf, expected + i, 1) == 1);
+    }
+    for (unsigned i = 0; i < length; i++)
+        expected[prefilled + i] = payload[i] = (uint8_t)i;
+    assert(write_rpc_req(&connection, NULL, payload, length, 0, 0) == length);
+    k_msleep(1);
+    assert(rx_output_len == prefilled + length);
+    assert(!memcmp(rx_output, expected, rx_output_len));
+}
 
 static void exercise(const uint8_t *payload, size_t n, unsigned capacity, bool prefilled) {
     memset(&rpc_tx_buf, 0, sizeof(rpc_tx_buf));
@@ -155,7 +197,10 @@ static void exercise(const uint8_t *payload, size_t n, unsigned capacity, bool p
     }
 }
 int main(int argc, char **argv) {
-    (void)argv;
+    if (argc > 1 && !strcmp(argv[1], "--rx-regression-only")) {
+        exercise_rx(20, 20);
+        return 0;
+    }
     uint8_t payload[1024];
     memset(payload, 0x42, sizeof(payload));
     /* Deterministically leave a 64-byte ring full just before the EOF write. */
@@ -178,6 +223,10 @@ int main(int argc, char **argv) {
     submissions = 0;
     gatt_tx_notify(&rpc_tx_buf, 27, false, &state);
     assert(submissions == 1 && state.pending_notify == 0);
+    for (unsigned prefilled = 0; prefilled <= 30; prefilled++)
+        for (unsigned length = 0; length <= 128; length++)
+            exercise_rx(prefilled, length);
     puts("PASS: exact-full EOF, full-ring SOF, escaped/chunked payloads and BLE flush threshold");
+    puts("PASS: saturated RX wakes/yields to decoder; all bytes retained across 30-byte ring");
     return 0;
 }
