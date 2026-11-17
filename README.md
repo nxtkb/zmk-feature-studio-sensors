@@ -38,7 +38,7 @@ Pinned baselines:
 - ZMK `4de313367288aad5aeaa1243890e40dc813f7008`
 - zmk-studio-messages `6cb4c283e76209d59c45fbcb218800cd19e9339d`
 
-Use isolated official checkouts. Apply both current patches through the module's
+Use isolated official checkouts. Apply every patch listed in
 `zephyr/patches.yml`, then include the module in `ZMK_EXTRA_MODULES` and explicitly
 select the `studio-sensors-local` snippet. Existing USB/display patches and board
 build requirements remain owned by their respective modules.
@@ -54,6 +54,10 @@ This is a firmware resource budget, not an App assumption about keyboard shape.
 The App currently bounds discovery at 64 sensors and 64 KiB per sensor response.
 The module can also report an empty sensor list. Optional board metadata uses
 `nxtkb,studio-sensors`; see the [trial guide](docs/local-trial.md).
+
+The manifest keeps the sensor-core integration, messages integration and pinned
+[Studio TX backpressure repair](docs/studio-tx-backpressure.md) as separate patches.
+The transport repair prevents a full TX ring from dropping response delimiters.
 
 ## Android trial
 
@@ -93,7 +97,8 @@ adb reverse --remove tcp:19761
 ```
 
 CI checks patch checksums, pinned-baseline applicability and schema consistency,
-then compiles and tests the production C engine/Nanopb codec on Linux. It does
+then compiles and tests the production C engine/Nanopb codec and the actual pinned
+Studio transmit functions on Linux, including an unpatched negative control. It does
 not flash devices or qualify firmware for release. To run patch checks locally:
 
 ```sh
@@ -108,6 +113,12 @@ To regenerate the integration patches after editing the pinned worktrees:
 ```sh
 python scripts/export_patches.py --zmk /path/to/pinned-zmk-worktree \
     --messages /path/to/pinned-messages-worktree
+```
+
+To reproduce the framing regression and verify the repair against a patched checkout:
+
+```sh
+python scripts/test_studio_tx.py --zmk /path/to/pinned-patched-zmk
 ```
 
 ## Limits and licensing

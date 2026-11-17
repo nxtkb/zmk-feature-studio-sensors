@@ -10,7 +10,19 @@ patches:
     apply-command: git apply
     comments: |
       Local experiment 0.1; field 101 is private, not allocated upstream.
-      Apply both patches to official ZMK 4de31336/messages 6cb4c28.
+      Apply all manifest entries to official ZMK 4de31336/messages 6cb4c28.
+      Enable explicitly with the studio-sensors-local snippet.
+  - path: zmk/studio-rpc-tx-backpressure.patch
+    sha256sum: 66c8ea4f1bdcc20b9a904f4871545d12b6ba328a1de504e5740f46cad89949dc
+    module: zmk
+    author: NXTKB
+    email: sky_io@outlook.com
+    date: 2026-11-17
+    upstreamable: false
+    apply-command: git apply
+    comments: |
+      Local experiment 0.1; field 101 is private, not allocated upstream.
+      Apply all manifest entries to official ZMK 4de31336/messages 6cb4c28.
       Enable explicitly with the studio-sensors-local snippet.
   - path: zmk-studio-messages/studio-sensors-local.patch
     sha256sum: 6983af3856a50a176298c099caae83e404f87298a09529f00161b7f8a8619c06
@@ -22,5 +34,5 @@ patches:
     apply-command: git apply
     comments: |
       Local experiment 0.1; field 101 is private, not allocated upstream.
-      Apply both patches to official ZMK 4de31336/messages 6cb4c28.
+      Apply all manifest entries to official ZMK 4de31336/messages 6cb4c28.
       Enable explicitly with the studio-sensors-local snippet.

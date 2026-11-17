@@ -1,0 +1,89 @@
+diff --git a/app/src/studio/gatt_rpc_transport.c b/app/src/studio/gatt_rpc_transport.c
+index dff18259..2e0c18db 100644
+--- a/app/src/studio/gatt_rpc_transport.c
++++ b/app/src/studio/gatt_rpc_transport.c
+@@ -104,10 +104,12 @@ static uint16_t get_notify_size_for_conn(struct bt_conn *conn) {
+     return notify_size;
+ }
+ 
++#define RPC_INDICATION_BUFFER_SIZE 27
++
+ static void refresh_notify_size(void) {
+     struct bt_conn *conn = zmk_ble_active_profile_conn();
+ 
+-    uint16_t ns = get_notify_size_for_conn(conn);
++    uint16_t ns = MIN(get_notify_size_for_conn(conn), RPC_INDICATION_BUFFER_SIZE);
+     if (conn) {
+         bt_conn_unref(conn);
+     }
+@@ -126,7 +128,7 @@ static int gatt_stop_rx(void) {
+     return 0;
+ }
+ 
+-static uint8_t indicate_buffer[27];
++static uint8_t indicate_buffer[RPC_INDICATION_BUFFER_SIZE];
+ 
+ static void indicate_cb(struct bt_conn *conn, struct bt_gatt_indicate_params *params, uint8_t err);
+ 
+@@ -195,7 +197,7 @@ static void gatt_tx_notify(struct ring_buf *tx_buf, size_t added, bool msg_done,
+ 
+     atomic_t ns = atomic_get(&notify_size);
+ 
+-    if (msg_done || state->pending_notify > ns) {
++    if (msg_done || state->pending_notify >= ns) {
+         k_work_submit(&notify_tx_work);
+         state->pending_notify = 0;
+     }
+diff --git a/app/src/studio/rpc.c b/app/src/studio/rpc.c
+index e79b5568..9f2b4487 100644
+--- a/app/src/studio/rpc.c
++++ b/app/src/studio/rpc.c
+@@ -131,6 +131,8 @@ static bool rpc_tx_buffer_write(pb_ostream_t *stream, const uint8_t *buf, size_t
+         uint32_t claim_len = ring_buf_put_claim(&rpc_tx_buf, &write_buf, count - written);
+ 
+         if (claim_len == 0) {
++            /* Let the transport worker/indication callback make room. */
++            k_msleep(1);
+             continue;
+         }
+ 
+@@ -176,6 +178,15 @@ static pb_ostream_t pb_ostream_for_tx_buf(void *user_data) {
+     return stream;
+ }
+ 
++/* Frame delimiters must participate in the same backpressure as the payload.
++ * A one-byte ring_buf_put() may otherwise return zero and silently lose EOF. */
++static void rpc_tx_framing_byte_write(uint8_t byte, bool msg_done, void *user_data) {
++    while (ring_buf_put(&rpc_tx_buf, &byte, 1) != 1) {
++        k_msleep(1);
++    }
++    selected_transport->tx_notify(&rpc_tx_buf, 1, msg_done, user_data);
++}
++
+ static int send_response(const zmk_studio_Response *resp) {
+     k_mutex_lock(&rpc_transport_mutex, K_FOREVER);
+ 
+@@ -187,10 +198,7 @@ static int send_response(const zmk_studio_Response *resp) {
+ 
+     pb_ostream_t stream = pb_ostream_for_tx_buf(user_data);
+ 
+-    uint8_t framing_byte = FRAMING_SOF;
+-    ring_buf_put(&rpc_tx_buf, &framing_byte, 1);
+-
+-    selected_transport->tx_notify(&rpc_tx_buf, 1, false, user_data);
++    rpc_tx_framing_byte_write(FRAMING_SOF, false, user_data);
+ 
+     /* Now we are ready to encode the message! */
+     bool status = pb_encode(&stream, &zmk_studio_Response_msg, resp);
+@@ -202,10 +210,7 @@ static int send_response(const zmk_studio_Response *resp) {
+         return -EINVAL;
+     }
+ 
+-    framing_byte = FRAMING_EOF;
+-    ring_buf_put(&rpc_tx_buf, &framing_byte, 1);
+-
+-    selected_transport->tx_notify(&rpc_tx_buf, 1, true, user_data);
++    rpc_tx_framing_byte_write(FRAMING_EOF, true, user_data);
+ 
+ exit:
+     k_mutex_unlock(&rpc_transport_mutex);

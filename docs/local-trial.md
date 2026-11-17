@@ -53,8 +53,8 @@
   零传感器 FLASH 273140 B / RAM 97806 B；左手 RAM 使用率 83.32%，后续扩充需继续检查预算。两者均为编译验证。
 - 当前模块核心与消息补丁均对固定官方基线检查可应用。显示屏 USB 供电与 Codex USB HID 补丁未混入 sensor 补丁。
 
-以上不表示实体键盘已通过验收。当前未刷写键盘，尚未验证实际旋转 HID、分体传感器、
-BLE/USB 读写、锁定/重连、掉电、升级后设置恢复及与第三方客户端同时操作。
+以上是宿主和构建阶段的记录。后续已刷入实体带屏左手；实机读写、输入链路和传输问题见下文。
+实体旋转、分体传感器、保存/掉电、升级及第三方客户端互操作尚未完整验收。
 
 ## 板级接入与自用步骤
 
@@ -66,7 +66,7 @@ Sweep Pro 的可选 `sweep_studio_sensors` shield 当前声明 ID 17/29，stable
 
 本地自用包与校验和保存在 `nxtkb-app/artifacts/studio-sensors-local-0.1/`。
 
-1. 使用固定官方 ZMK 的隔离 checkout，应用 display USB 供电补丁和需要的 Codex HID 补丁，再应用本模块两个补丁。
+1. 使用固定官方 ZMK 的隔离 checkout，应用 display USB 供电补丁和需要的 Codex HID 补丁，再应用本模块补丁清单的全部条目（sensor 核心、messages、Studio TX 兼容修复）。
    Sweep Pro 必须从 ZMK west 工作区构建；完整基础命令见 `Sweep-Pro/docs/en/local-build.md`。
 2. extra modules 加入本模块和匹配的 messages checkout；snippets 加 `studio-sensors-local`；
    Sweep Pro shields 可加 `sweep_studio_sensors`。不要改用旧 fork 叠加相同补丁。
@@ -83,3 +83,15 @@ Sweep Pro 的可选 `sweep_studio_sensors` shield 当前声明 ID 17/29，stable
 没有整键盘快照原子提交；新 StateChanged token 通知尚未接入，冲突主要靠 expected token 检出。
 写入结果不确定时重新读取，不自动重发。其他客户端的无 token Save/Discard 仍作用于共享编辑状态。
 新增硬件类型及全新参数结构需要版本/能力扩展。正式 wire 分配、迁移与发布资格应等自用验证完成后再评审。
+
+
+## 实机阶段补充：2026-11-17
+
+- 已在用户确认的 nice!nano 带屏左手刷入试用版，荣耀 Android 16 App 保留设备记录。
+- BLE 完整读取 7 层、ID 17/29 的旋钮描述与绑定成功；临时写入只改变目标旋钮参数，普通键、布局及其他绑定保持一致。
+- 荣耀曾显示 HOGP 连接但未创建输入设备。只关闭再开启 Sweep Pro 的“输入设备”配置后，Keyboard/Mouse 设备与 UHID fd 正常出现；未删除配对。
+- 之后测试还遇到 USB 输出路径与一次重启：代际变化，未保存的 A 恢复 stock。改用纯蓝牙并重新写入后，系统实际捕获到 Q 和 8 对旋钮生成的 A 事件。
+- 硬件诊断验证 Discard 恢复全部原 sensor 绑定，普通按键未改；随后实机捕获到 8 对 A 和 8 对 B，双方向字母动作已验证；保存和断电验证仍在进行。
+- 实机反复回读出现完整 protobuf 内容缺少 EOF，已通过原版生产 TX 函数的负向对照复现，并加入独立兼容补丁。
+  详细证据、修复范围和测试见 [Studio TX backpressure](studio-tx-backpressure.md)。补丁后固件仍需重新刷写实测。
+- 本轮持续维持正式发布隔离，未向上游提交。

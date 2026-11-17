@@ -14,21 +14,28 @@ import tempfile
 
 import yaml
 
-from export_patches import CORE_FILES, MESSAGES_BASE, ROOT, ZMK_BASE
+from export_patches import CORE_FILES, TRANSPORT_FILES, MESSAGES_BASE, ROOT, ZMK_BASE
 
 
 def check(zmk: Path, messages: Path):
     projects = {
-        'zmk': (zmk, ZMK_BASE, set(CORE_FILES)),
-        'zmk-studio-messages': (messages, MESSAGES_BASE,
-                                {'proto/zmk/keymap.proto', 'proto/zmk/sensors.proto',
-                                 'proto/zmk/sensors.options'}),
+        'zmk': (zmk, ZMK_BASE),
+        'zmk-studio-messages': (messages, MESSAGES_BASE),
+    }
+    scopes = {
+        'zmk/studio-sensors-local.patch': ('zmk', set(CORE_FILES)),
+        'zmk/studio-rpc-tx-backpressure.patch': ('zmk', set(TRANSPORT_FILES)),
+        'zmk-studio-messages/studio-sensors-local.patch': ('zmk-studio-messages',
+            {'proto/zmk/keymap.proto', 'proto/zmk/sensors.proto', 'proto/zmk/sensors.options'}),
     }
     entries = yaml.safe_load((ROOT / 'zephyr/patches.yml').read_text())['patches']
-    if len(entries) != 2 or {entry['module'] for entry in entries} != set(projects):
-        raise ValueError('Expected exactly the ZMK and messages integration patches')
+    if len(entries) != len(scopes) or {entry['path'] for entry in entries} != set(scopes):
+        raise ValueError('Expected sensor core, Studio TX compatibility and messages patches')
     for entry in entries:
-        checkout, revision, allowed = projects[entry['module']]
+        module, allowed = scopes[entry['path']]
+        if entry['module'] != module:
+            raise ValueError(f'{entry["path"]}: wrong target module')
+        checkout, revision = projects[module]
         actual = subprocess.check_output(['git', '-C', str(checkout), 'rev-parse', 'HEAD'], text=True).strip()
         if actual != revision:
             raise ValueError(f'{checkout}: expected pinned baseline {revision}, got {actual}')

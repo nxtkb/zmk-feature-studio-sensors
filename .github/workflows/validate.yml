@@ -40,6 +40,11 @@ jobs:
         run: python scripts/check_patches.py --zmk _deps/zmk --messages _deps/messages
       - name: Check historical draft contract
         run: python scripts/check_contract.py --upstream-proto _deps/messages/proto/zmk
+      - name: Prepare pinned Studio TX compatibility patch
+        working-directory: _deps/zmk
+        run: git apply ../../zephyr/patches/zmk/studio-rpc-tx-backpressure.patch
+      - name: Check actual Studio TX functions and pinned negative control
+        run: python scripts/test_studio_tx.py --zmk _deps/zmk
       - name: Prepare local message integration
         working-directory: _deps/messages
         run: git apply ../../zephyr/patches/zmk-studio-messages/studio-sensors-local.patch
