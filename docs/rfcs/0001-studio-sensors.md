@@ -14,7 +14,7 @@ Codex 和 Android。另一个有 1 个或 3 个旋钮的键盘，不应需要修
 协议不把旋转模拟成负数按键位置，也不把所有 sensor 等同于两个普通按键。
 任意组合两个行为、动态宏、轴曲线、触控板配置和通用设备遥测都不在本提案首版范围。
 
-本文的 MUST 表示设计要求，不表示本地实现已全部验收。当前实现、review 结论和未完成项见 [本地试用记录](../local-trial.md)。
+本文的 MUST 表示设计要求，不表示本地实现已全部验收。当前实现、review 结论和未完成项见 [实现验证与限制](../validation.md)。
 
 ## 2. 已核对的上游基础
 
@@ -53,7 +53,7 @@ Codex 和 Android。另一个有 1 个或 3 个旋钮的键盘，不应需要修
 | 客户端协议适配 | App 的独立 protocol/client 层 | 能力与版本协商、状态模型、ID 路由；不依赖 Compose |
 | UI | Android / Web / iOS 各自实现 | 显示固件描述的传感器，按角色渲染参数，提供通用回退 |
 
-第一阶段采用“**模块 + 最小集成补丁**”，不宣传零补丁。传输保持原样。
+第一阶段采用“**模块 + 最小集成补丁**”，复用既有传输；固定基线的收发兼容修复以独立补丁维护。
 目标后端 API 应能被 CLI、Studio 或其他客户端适配器共用，不把 protobuf 类型传进 keymap 核心。
 独立模块先拥有协议草案和测试；硬件仓库只负责声明元数据、固定模块版本和显式接入。
 
@@ -129,8 +129,7 @@ active physical layout 改变时，关联位置可能改变，必须更新拓扑
 
 ## 7. 读写与继承
 
-当前可执行文件为 [local/sensors.proto](../../protocol/local/sensors.proto)，只适用于本地 0.1。
-[早期候选 schema](../../protocol/draft/sensors.proto) 保留作设计历史。两者均不构成上游分配的 wire API。
+当前可执行文件为 [local/sensors.proto](../../protocol/local/sensors.proto)，适用于 NXTKB 扩展 0.1，尚未获得上游 wire 分配。
 本地 schema 使用独立叶子 BehaviorBinding DTO，沿用 Studio 值语义，避免 keymap 导入 sensors 后循环导入。
 
 - Describe：一次返回完整、有界的描述快照。
@@ -246,4 +245,4 @@ upstream 顺序建议：先讨论 keymap sensor C API 和行为 metadata，继�
 - central/peripheral、无传感器构建、BLE/USB、RAM/flash 预算及支持版本的补丁应用检查。
 
 以上是完整验收要求，**不是已经全部通过的项目**。已完成的 C 后端、手机联调和两种板级构建
-证据见 [本地试用记录](../local-trial.md)；这些不能替代实体旋转、BLE/USB、掉电或升级验证。
+证据见 [实现验证与限制](../validation.md)；这些不能替代实体旋转、BLE/USB、掉电或升级验证。

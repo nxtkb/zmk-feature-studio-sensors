@@ -189,10 +189,10 @@ index 99323b56..86e6e4fc 100644
      .sensor_binding_process = zmk_behavior_sensor_rotate_common_process};
  
 diff --git a/app/src/keymap.c b/app/src/keymap.c
-index cc605ac4..6af9d472 100644
+index cc605ac4..f0db8969 100644
 --- a/app/src/keymap.c
 +++ b/app/src/keymap.c
-@@ -271,14 +271,36 @@ zmk_keymap_get_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t bin
+@@ -271,6 +271,28 @@ zmk_keymap_get_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t bin
      return &zmk_keymap[layer_id][mapped_idx];
  }
  
@@ -221,99 +221,82 @@ index cc605ac4..6af9d472 100644
  #if IS_ENABLED(CONFIG_ZMK_KEYMAP_SETTINGS_STORAGE)
  
  #define PENDING_ARRAY_SIZE DIV_ROUND_UP(ZMK_KEYMAP_LEN, 8)
- 
+@@ -278,7 +300,7 @@ zmk_keymap_get_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t bin
  static uint8_t zmk_keymap_layer_pending_changes[ZMK_KEYMAP_LAYERS_LEN][PENDING_ARRAY_SIZE];
  
--int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t binding_idx,
+ int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t binding_idx,
 -                                        struct zmk_behavior_binding binding) {
-+static int ss_local_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t binding_idx,
 +                                             struct zmk_behavior_binding binding) {
      if (binding_idx >= ZMK_KEYMAP_LEN) {
          return -EINVAL;
      }
-@@ -322,8 +344,8 @@ int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t
+@@ -317,13 +339,14 @@ int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t
+     // TODO: Need a mutex to protect access to the keymap data?
+     memcpy(&zmk_keymap[layer_id][storage_binding_idx], &binding, sizeof(binding));
+ 
++    zmk_keymap_sensors_changed();
+     return 0;
+ }
  
  #else
  
--int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t binding_idx,
+ int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t binding_idx,
 -                                        struct zmk_behavior_binding binding) {
-+static int ss_local_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint16_t binding_idx,
 +                                             struct zmk_behavior_binding binding) {
      return -ENOTSUP;
  }
  
-@@ -336,7 +358,8 @@ static uint8_t settings_layer_orders[ZMK_KEYMAP_LAYERS_LEN];
+@@ -336,7 +359,8 @@ static uint8_t settings_layer_orders[ZMK_KEYMAP_LAYERS_LEN];
  
  #endif
  
 -int zmk_keymap_move_layer(zmk_keymap_layer_index_t start_idx, zmk_keymap_layer_index_t dest_idx) {
-+static int ss_local_move_layer(zmk_keymap_layer_index_t start_idx,
++int zmk_keymap_move_layer(zmk_keymap_layer_index_t start_idx,
 +                               zmk_keymap_layer_index_t dest_idx) {
      ASSERT_LAYER_VAL(start_idx, -EINVAL)
      ASSERT_LAYER_VAL(dest_idx, -EINVAL)
  
-@@ -363,7 +386,7 @@ int zmk_keymap_move_layer(zmk_keymap_layer_index_t start_idx, zmk_keymap_layer_i
+@@ -360,6 +384,7 @@ int zmk_keymap_move_layer(zmk_keymap_layer_index_t start_idx, zmk_keymap_layer_i
+         keymap_layer_orders[dest_idx] = val;
+     }
+ 
++    zmk_keymap_sensors_changed();
      return 0;
  }
  
--int zmk_keymap_add_layer(void) {
-+static int ss_local_add_layer(void) {
-     uint32_t seen_layer_ids = 0;
+@@ -378,6 +403,7 @@ int zmk_keymap_add_layer(void) {
+         for (int candidate_id = 0; candidate_id < ZMK_KEYMAP_LAYERS_LEN; candidate_id++) {
+             if (!(seen_layer_ids & BIT(candidate_id))) {
+                 keymap_layer_orders[index] = candidate_id;
++                zmk_keymap_sensors_changed();
+                 return index;
+             }
+         }
+@@ -405,6 +431,7 @@ int zmk_keymap_remove_layer(zmk_keymap_layer_index_t index) {
+ 
      LOG_HEXDUMP_DBG(keymap_layer_orders, ZMK_KEYMAP_LAYERS_LEN, "Order");
  
-@@ -386,7 +409,7 @@ int zmk_keymap_add_layer(void) {
-     return -ENOSPC;
- }
- 
--int zmk_keymap_remove_layer(zmk_keymap_layer_index_t index) {
-+static int ss_local_remove_layer(zmk_keymap_layer_index_t index) {
-     ASSERT_LAYER_VAL(index, -EINVAL);
- 
-     if (keymap_layer_orders[index] == ZMK_KEYMAP_LAYER_ID_INVAL) {
-@@ -408,7 +431,7 @@ int zmk_keymap_remove_layer(zmk_keymap_layer_index_t index) {
++    zmk_keymap_sensors_changed();
      return 0;
  }
  
--int zmk_keymap_restore_layer(zmk_keymap_layer_id_t id, zmk_keymap_layer_index_t at_index) {
-+static int ss_local_restore_layer(zmk_keymap_layer_id_t id, zmk_keymap_layer_index_t at_index) {
-     ASSERT_LAYER_VAL(at_index, -EINVAL);
-     ASSERT_LAYER_VAL(id, -ENODEV);
+@@ -418,6 +445,7 @@ int zmk_keymap_restore_layer(zmk_keymap_layer_id_t id, zmk_keymap_layer_index_t
  
-@@ -421,7 +444,7 @@ int zmk_keymap_restore_layer(zmk_keymap_layer_id_t id, zmk_keymap_layer_index_t
+     keymap_layer_orders[at_index] = id;
+ 
++    zmk_keymap_sensors_changed();
      return 0;
  }
  
--int zmk_keymap_set_layer_name(zmk_keymap_layer_id_t id, const char *name, size_t size) {
-+static int ss_local_set_layer_name(zmk_keymap_layer_id_t id, const char *name, size_t size) {
-     ASSERT_LAYER_VAL(id, -EINVAL);
+@@ -437,6 +465,7 @@ int zmk_keymap_set_layer_name(zmk_keymap_layer_id_t id, const char *name, size_t
  
-     if (size >= CONFIG_ZMK_KEYMAP_LAYER_NAME_MAX_LEN) {
-@@ -442,19 +465,19 @@ int zmk_keymap_set_layer_name(zmk_keymap_layer_id_t id, const char *name, size_t
+     WRITE_BIT(changed_layer_names, id, 1);
  
- #else
- 
--int zmk_keymap_move_layer(zmk_keymap_layer_index_t layer, zmk_keymap_layer_index_t dest) {
-+static int ss_local_move_layer(zmk_keymap_layer_index_t layer, zmk_keymap_layer_index_t dest) {
-     return -ENOTSUP;
++    zmk_keymap_sensors_changed();
+     return 0;
  }
  
--int zmk_keymap_add_layer(void) { return -ENOTSUP; }
-+static int ss_local_add_layer(void) { return -ENOTSUP; }
- 
--int zmk_keymap_remove_layer(zmk_keymap_layer_index_t index) { return -ENOTSUP; }
-+static int ss_local_remove_layer(zmk_keymap_layer_index_t index) { return -ENOTSUP; }
- 
--int zmk_keymap_restore_layer(zmk_keymap_layer_id_t id, zmk_keymap_layer_index_t at_index) {
-+static int ss_local_restore_layer(zmk_keymap_layer_id_t id, zmk_keymap_layer_index_t at_index) {
-     return -ENOTSUP;
- }
- 
--int zmk_keymap_set_layer_name(zmk_keymap_layer_id_t id, const char *name, size_t size) {
-+static int ss_local_set_layer_name(zmk_keymap_layer_id_t id, const char *name, size_t size) {
-     return -ENOTSUP;
- }
- 
-@@ -473,6 +496,8 @@ struct zmk_behavior_binding_setting {
+@@ -473,6 +502,8 @@ struct zmk_behavior_binding_setting {
  } __packed;
  
  int zmk_keymap_check_unsaved_changes(void) {
@@ -322,7 +305,7 @@ index cc605ac4..6af9d472 100644
      for (int l = 0; l < ZMK_KEYMAP_LAYERS_LEN; l++) {
          uint8_t *pending = zmk_keymap_layer_pending_changes[l];
          for (int kp = 0; kp < ZMK_KEYMAP_LEN; kp++) {
-@@ -583,7 +608,8 @@ int zmk_keymap_save_changes(void) {
+@@ -583,7 +614,8 @@ int zmk_keymap_save_changes(void) {
      }
  #endif // IS_ENABLED(CONFIG_ZMK_KEYMAP_LAYER_REORDERING)
  
@@ -332,7 +315,7 @@ index cc605ac4..6af9d472 100644
  }
  
  #if IS_ENABLED(CONFIG_ZMK_KEYMAP_LAYER_REORDERING)
-@@ -624,7 +650,7 @@ int zmk_keymap_discard_changes(void) {
+@@ -624,7 +656,7 @@ int zmk_keymap_discard_changes(void) {
          }
      }
  
@@ -341,7 +324,7 @@ index cc605ac4..6af9d472 100644
  }
  
  static int keymap_track_changed_bindings(const char *key, size_t len, settings_read_cb read_cb,
-@@ -647,6 +673,8 @@ static int keymap_track_changed_bindings(const char *key, size_t len, settings_r
+@@ -647,6 +679,8 @@ static int keymap_track_changed_bindings(const char *key, size_t len, settings_r
              return -EINVAL;
          }
  
@@ -350,7 +333,7 @@ index cc605ac4..6af9d472 100644
          WRITE_BIT((*state)[layer][key_position / 8], key_position % 8, 1);
      }
      return 0;
-@@ -655,7 +683,7 @@ static int keymap_track_changed_bindings(const char *key, size_t len, settings_r
+@@ -655,7 +689,7 @@ static int keymap_track_changed_bindings(const char *key, size_t len, settings_r
  int zmk_keymap_reset_settings(void) {
      settings_delete(LAYER_ORDER_SETTINGS_KEY);
  
@@ -359,7 +342,7 @@ index cc605ac4..6af9d472 100644
  
      settings_load_subtree_direct("keymap", keymap_track_changed_bindings,
                                   &zmk_keymap_layer_changes);
-@@ -686,7 +714,7 @@ int zmk_keymap_reset_settings(void) {
+@@ -686,7 +720,7 @@ int zmk_keymap_reset_settings(void) {
  
      reload_from_stock_keymap();
  
@@ -368,7 +351,7 @@ index cc605ac4..6af9d472 100644
  }
  
  #else
-@@ -752,6 +780,15 @@ int zmk_keymap_position_state_changed(uint8_t source, uint32_t position, bool pr
+@@ -752,6 +786,15 @@ int zmk_keymap_position_state_changed(uint8_t source, uint32_t position, bool pr
  }
  
  #if ZMK_KEYMAP_HAS_SENSORS
@@ -384,7 +367,7 @@ index cc605ac4..6af9d472 100644
  int zmk_keymap_sensor_event(uint8_t sensor_index,
                              const struct zmk_sensor_channel_data *channel_data,
                              size_t channel_data_size, int64_t timestamp) {
-@@ -764,13 +801,25 @@ int zmk_keymap_sensor_event(uint8_t sensor_index,
+@@ -764,13 +807,25 @@ int zmk_keymap_sensor_event(uint8_t sensor_index,
              continue;
          }
  
@@ -411,7 +394,7 @@ index cc605ac4..6af9d472 100644
              LOG_DBG("No behavior assigned to %d on layer %d", sensor_index, layer_id);
              continue;
          }
-@@ -781,6 +830,14 @@ int zmk_keymap_sensor_event(uint8_t sensor_index,
+@@ -781,6 +836,14 @@ int zmk_keymap_sensor_event(uint8_t sensor_index,
              .timestamp = timestamp,
          };
  
@@ -426,49 +409,6 @@ index cc605ac4..6af9d472 100644
          int ret = behavior_sensor_keymap_binding_accept_data(
              binding, event, zmk_sensors_get_config_at_index(sensor_index), channel_data_size,
              channel_data);
-@@ -981,3 +1038,42 @@ int keymap_init(void) {
- }
- 
- SYS_INIT(keymap_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
-+
-+/* Observe committed C API operations as well as Studio calls. */
-+int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer, uint16_t position,
-+                                        struct zmk_behavior_binding binding) {
-+    int ret = ss_local_set_layer_binding_at_idx(layer, position, binding);
-+    if (ret >= 0)
-+        zmk_keymap_sensors_changed();
-+    return ret;
-+}
-+int zmk_keymap_move_layer(zmk_keymap_layer_index_t source, zmk_keymap_layer_index_t destination) {
-+    int ret = ss_local_move_layer(source, destination);
-+    if (ret >= 0)
-+        zmk_keymap_sensors_changed();
-+    return ret;
-+}
-+int zmk_keymap_add_layer(void) {
-+    int ret = ss_local_add_layer();
-+    if (ret >= 0)
-+        zmk_keymap_sensors_changed();
-+    return ret;
-+}
-+int zmk_keymap_remove_layer(zmk_keymap_layer_index_t index) {
-+    int ret = ss_local_remove_layer(index);
-+    if (ret >= 0)
-+        zmk_keymap_sensors_changed();
-+    return ret;
-+}
-+int zmk_keymap_restore_layer(zmk_keymap_layer_id_t id, zmk_keymap_layer_index_t index) {
-+    int ret = ss_local_restore_layer(id, index);
-+    if (ret >= 0)
-+        zmk_keymap_sensors_changed();
-+    return ret;
-+}
-+int zmk_keymap_set_layer_name(zmk_keymap_layer_id_t id, const char *name, size_t size) {
-+    int ret = ss_local_set_layer_name(id, name, size);
-+    if (ret >= 0)
-+        zmk_keymap_sensors_changed();
-+    return ret;
-+}
 diff --git a/app/src/physical_layouts.c b/app/src/physical_layouts.c
 index ba21ae31..e69928b6 100644
 --- a/app/src/physical_layouts.c

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: MIT
 config NXTKB_STUDIO_SENSORS
-    bool "Local experimental Studio sensor protocol 0.1"
+    bool "Runtime Studio sensor bindings (NXTKB extension 0.1)"
     depends on ZMK_STUDIO_RPC
     help
-      Enables the independent sensor service for local testing. Requires the
-      matching integration patches. This is not an upstream wire allocation.
+      Enables runtime sensor editing for compatible clients. Requires this
+      module's pinned integration patches; this is not an upstream protocol.
 
 config NXTKB_STUDIO_SENSORS_MAX_SENSORS
-    int "Maximum sensor slots allocated by the local backend"
+    int "Maximum runtime sensor slots"
     depends on NXTKB_STUDIO_SENSORS
     range 1 16
     default 4

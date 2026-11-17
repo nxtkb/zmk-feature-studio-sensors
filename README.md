@@ -1,137 +1,73 @@
-# ZMK Studio Sensors — local experiment 0.1
+# ZMK Studio Sensors
 
-Runtime editing of per-layer ZMK sensor bindings, packaged as an independent
-module with small core/message integration patches. This local implementation
-is for self-use and review. **The wire ABI is experimental, not allocated by
-upstream, and not enabled in normal NXTKB releases.**
+Runtime editing of per-layer sensor bindings for ZMK keyboards. This module
+adds discovery, validated binding changes and persistence through Studio's
+Save/Discard/Reset operations. Encoders are the first supported sensor type.
 
-- [Design RFC](docs/rfcs/0001-studio-sensors.md)
-- [Local review, validation and trial guide](docs/local-trial.md)
-- [Historical tag-100 prototype audit](docs/prototype-audit.md)
-- [Unsubmitted upstream discussion draft](docs/upstream-discussion.md)
+This is the **NXTKB protocol extension 0.1**, not an upstream ZMK Studio feature.
+The wire identifier remains `com.nxtkb.studio.sensors.local/0.1` for compatibility
+with existing clients. A compatible client is required; the stock ZMK Studio UI
+does not provide an encoder editor. The companion NXTKB App is not yet released.
 
-## What is implemented
+## Install
 
-The module provides a protobuf-independent C engine, Nanopb RPC adapter, Zephyr
-settings integration and a board metadata binding. Discovery reports sensor IDs,
-optional stable keys and press associations, types, permissions, behavior contexts,
-parameter roles, limits and a generation/topology/revision token. Read and write
-address IDs, never display order. Inheritance is explicit. Sensor edits participate
-in the existing Studio Save/Discard/Reset lifecycle with **best-effort** persistence.
+Start with a working Studio-enabled keyboard configuration. Add this project to
+its existing west manifest, using an NXTKB remote:
 
-The executable schema is [protocol/local/sensors.proto](protocol/local/sensors.proto).
-The exact handshake is `com.nxtkb.studio.sensors.local/0.1`, major 0, minor 1.
-Matching local firmware uses typed keymap request/response **field 101**. This is a
-private experiment; a handshake cannot reserve a protobuf field against other
-implementations. The Android adapter requires explicit debug opt-in and preserves
-pristine official keymap/behavior schemas. Unsupported versions degrade the sensor
-feature while keeping ordinary key editing available.
-
-The earlier conceptual schema is retained in `protocol/draft/`. The original
-unversioned field-100 patches are archived in `experimental/v0/`; the current App
-does not implement that protocol.
-
-## Firmware integration
-
-Pinned baselines:
-
-- ZMK `4de313367288aad5aeaa1243890e40dc813f7008`
-- zmk-studio-messages `6cb4c283e76209d59c45fbcb218800cd19e9339d`
-
-Use isolated official checkouts. Apply every patch listed in
-`zephyr/patches.yml`, then include the module in `ZMK_EXTRA_MODULES` and explicitly
-select the `studio-sensors-local` snippet. Existing USB/display patches and board
-build requirements remain owned by their respective modules.
-
-```sh
-# From the appropriate west workspace, with the actual module location:
-west patch -sm /path/to/zmk-feature-studio-sensors apply
-# Add -S studio-sensors-local to the keyboard's normal west build command.
+```yaml
+manifest:
+  remotes:
+    - name: nxtkb
+      url-base: https://github.com/nxtkb
+  projects:
+    - name: zmk-feature-studio-sensors
+      remote: nxtkb
+      revision: v0.1.0
 ```
 
-`CONFIG_NXTKB_STUDIO_SENSORS_MAX_SENSORS` allocates slots (default 4, range 1–16).
-This is a firmware resource budget, not an App assumption about keyboard shape.
-The App currently bounds discovery at 64 sensors and 64 KiB per sensor response.
-The module can also report an empty sensor list. Optional board metadata uses
-`nxtkb,studio-sensors`; see the [trial guide](docs/local-trial.md).
+Merge these entries into your manifest; retain your existing ZMK and other
+projects. Supported baselines are ZMK
+`4de313367288aad5aeaa1243890e40dc813f7008` and zmk-studio-messages
+`6cb4c283e76209d59c45fbcb218800cd19e9339d`.
 
-The manifest keeps the sensor-core integration, messages integration and pinned
-[Studio buffer backpressure repair](docs/studio-tx-backpressure.md) as separate patches.
-The transport repair prevents a full TX ring from dropping response delimiters
-and a saturated RX producer from starving its decoder.
-
-## Android trial
-
-From the sibling `nxtkb-app` repository:
+From the west workspace, update projects and apply the module-owned patches:
 
 ```sh
-./scripts/android.sh :protocol:test :app:testDebugUnitTest :app:assembleDebug \
-    :app:assembleDebugAndroidTest :app:lintDebug \
-    -Pnxtkb.experimentalSensorProtocol=true
+west update
+west patch -sm zmk-feature-studio-sensors apply
 ```
 
-The `protocol` Gradle module reads this repository's `protocol/local` directory.
-Ordinary debug and all release/releaseQa builds keep the feature disabled.
-This does not qualify the module for release: real keyboard rotation, transport,
-power-loss recovery and firmware-upgrade migration still need hardware trials.
+Add `-S studio-sensors-local` to the keyboard's normal build command. The snippet
+explicitly enables the extension; adding the module alone does not enable it.
+The keyboard's existing display, USB and other patches remain separate.
 
-## Run the production C backend on a host
+## Describe your hardware
 
-Requires a C compiler, protoc, Python protobuf and the pinned Nanopb sources.
-Install Python test dependencies with `python -m pip install -r tests/requirements.txt`.
-The host port supplies a test-only catalog/transport; the sensor engine and codec
-are exactly `src/engine.c` and `src/rpc.c`, shared with firmware.
-The RPC adapter is single-flight: callers must serialize handling plus protobuf
-encoding; callback response data lasts until the next call. The engine uses its
-configured lock to protect event reads and binding mutation.
+The backend discovers keymap sensors and exposes stable IDs, names, types and
+optional press-key associations. Clients enumerate descriptors rather than
+assuming a fixed number of encoders or a particular keyboard model.
 
-```sh
-python scripts/build_host.py --nanopb /path/to/nanopb \
-    --messages /path/to/patched-zmk-studio-messages/proto/zmk
-python scripts/test_runtime.py
-# Optional phone integration test; listen only on localhost:
-python scripts/serve_local.py --port 19761
-adb reverse tcp:19761 tcp:19761
-adb shell am instrument -w -e class com.nxtkb.app.ui.SensorBackendTest \
-    com.nxtkb.app.test/androidx.test.runner.AndroidJUnitRunner
-adb reverse --remove tcp:19761
-```
+See [board integration](docs/integration.md) for optional metadata, slot limits
+and behavior support. Sensor parameters retain their native ZMK meaning;
+ordinary encoder presses remain normal key bindings.
 
-CI checks patch checksums, pinned-baseline applicability and schema consistency,
-then compiles and tests the production C engine/Nanopb codec and the actual pinned
-Studio transmit functions on Linux, including an unpatched negative control. It does
-not flash devices or qualify firmware for release. To run patch checks locally:
+## Protocol and upgrade behavior
 
-```sh
-python scripts/check_patches.py --zmk /path/to/pinned-zmk-checkout \
-    --messages /path/to/pinned-messages-checkout
-```
+- [Protocol contract](docs/protocol.md) and [canonical schema](protocol/local/sensors.proto)
+- [Validation and known limitations](docs/validation.md)
+- [Contributor tests](docs/testing.md)
+- [Design rationale](docs/rfcs/0001-studio-sensors.md)
 
-The input checkouts are not modified; patches are applied in temporary directories.
+Settings include a schema version, firmware compatibility signature and CRC.
+An incompatible firmware uses stock sensor bindings and reports unsaved changes;
+it retains the old records until Save or Reset. Save replaces them with the
+current values. Back up custom sensor bindings before changing firmware: automatic
+cross-firmware migration is not provided in 0.1.
 
-To regenerate the integration patches after editing the pinned worktrees:
+Persistence is best-effort, not a whole-keymap atomic transaction. After a write
+or Save times out, read the actual state before deciding what to do; do not
+blindly repeat configuration writes. See the validation notes for Bluetooth
+re-pairing and host-specific Consumer HID limitations.
 
-```sh
-python scripts/export_patches.py --zmk /path/to/pinned-zmk-worktree \
-    --messages /path/to/pinned-messages-worktree
-```
-
-To reproduce the framing regression and verify the repair against a patched checkout:
-
-```sh
-python scripts/test_studio_tx.py --zmk /path/to/pinned-patched-zmk
-```
-
-## Limits and licensing
-
-The local storage format validates version, a conservative build signature and
-CRC. Changed firmware may reject old sensor settings and use stock bindings;
-records are retained, and no automatic cross-firmware migration is promised.
-There is no whole-keymap atomic transaction or new state-token notification yet.
-Stale writes are rejected; already queued HID actions can finish normally.
-
-MIT. Patches retain ZMK's headers. Any future contribution must follow
-[ZMK's contribution policy](https://zmk.dev/docs/development/contributing/clean-room).
-Repository: [nxtkb/zmk-feature-studio-sensors](https://github.com/nxtkb/zmk-feature-studio-sensors).
-Upstream issues, PRs and discussions have not been submitted. Creating this
-repository does not freeze or allocate the experimental protocol.
+MIT. Integration patches retain upstream copyright headers. Any future upstream
+contribution must follow [ZMK's contribution policy](https://zmk.dev/docs/development/contributing/clean-room).

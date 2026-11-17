@@ -58,6 +58,14 @@ def main():
         if rx.returncode != 3 or 'RX producer spins' not in rx.stderr:
             raise RuntimeError('The pinned RX negative control did not reproduce the stalled producer: ' + rx.stderr)
         print('PASS negative control: pinned saturated RX producer starves decoder')
+        for flag, code, message in [
+            ('--encode-failure-regression-only', 4, 'Encoding failure retained transport mutex'),
+            ('--ownership-regression-only', 5, 'Inactive profile request was accepted'),
+        ]:
+            result = subprocess.run([str(old), flag], capture_output=True, text=True, timeout=5)
+            if result.returncode != code or message not in result.stderr:
+                raise RuntimeError('Pinned negative control did not reproduce: ' + message)
+            print('PASS negative control: ' + message)
         patched = compile_port(folder, *[(args.zmk / path).read_text() for path in paths])
         subprocess.run([str(patched)], check=True, timeout=15)
 

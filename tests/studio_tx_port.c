@@ -17,6 +17,8 @@
 #define LOG_WRN(...) ((void)0)
 #define LOG_ERR(...) ((void)0)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define BT_ATT_ERR_WRITE_NOT_PERMITTED 3
+#define BT_GATT_ERR(error) (-(error))
 struct ring_buf {
     uint8_t data[128];
     unsigned capacity, head, tail, used;
@@ -29,6 +31,7 @@ static bool rx_notified;
 static uint8_t output[32768];
 static unsigned output_len, async_budget;
 static int rpc_transport_mutex;
+static bool fail_encode;
 static void drain(unsigned count) {
     while (count-- && rpc_tx_buf.used) {
         assert(output_len < sizeof(output));
@@ -94,6 +97,8 @@ typedef struct {
 static const int zmk_studio_Response_msg = 0;
 static bool pb_encode(pb_ostream_t *stream, const int *fields, const zmk_studio_Response *r) {
     (void)fields;
+    if (fail_encode)
+        return false;
     return !r->length || stream->callback(stream, r->payload, r->length);
 }
 static void mock_notify(struct ring_buf *buffer, size_t added, bool done, void *data) {
@@ -126,13 +131,16 @@ static bool handling_rx = true;
 static struct ring_buf *zmk_rpc_get_rx_buf(void) { return &rpc_rx_buf; }
 static void zmk_rpc_rx_notify(void) { rx_notified = true; }
 static struct bt_conn connection;
+static bool active_connection_available = true;
 static atomic_t notify_size;
 static unsigned submissions;
 static int notify_tx_work;
 struct gatt_write_state {
     size_t pending_notify;
 };
-static struct bt_conn *zmk_ble_active_profile_conn(void) { return &connection; }
+static struct bt_conn *zmk_ble_active_profile_conn(void) {
+    return active_connection_available ? &connection : NULL;
+}
 static uint16_t get_notify_size_for_conn(struct bt_conn *conn) {
     (void)conn;
     return 71;
@@ -145,6 +153,37 @@ static void k_work_submit(int *work) {
     submissions++;
 }
 #include "native_gatt.inc"
+
+static void exercise_ownership(void) {
+    struct bt_conn inactive;
+    uint8_t payload = 0x42;
+    memset(&rpc_rx_buf, 0, sizeof(rpc_rx_buf));
+    rpc_rx_buf.capacity = 30;
+    rx_notified = false;
+    if (write_rpc_req(&inactive, NULL, &payload, 1, 0, 0) >= 0) {
+        fputs("Inactive profile request was accepted\n", stderr);
+        exit(5);
+    }
+    assert(!rpc_rx_buf.used && !rx_notified);
+    active_connection_available = false;
+    assert(write_rpc_req(&connection, NULL, &payload, 1, 0, 0) < 0);
+    assert(!rpc_rx_buf.used && !rx_notified);
+    active_connection_available = true;
+}
+
+static void exercise_encoding_failure(void) {
+    memset(&rpc_tx_buf, 0, sizeof(rpc_tx_buf));
+    rpc_tx_buf.capacity = 64;
+    output_len = 0;
+    fail_encode = true;
+    zmk_studio_Response response = {0};
+    assert(send_response(&response) == -EINVAL);
+    fail_encode = false;
+    if (rpc_transport_mutex) {
+        fputs("Encoding failure retained transport mutex\n", stderr);
+        exit(4);
+    }
+}
 
 static void exercise_rx(unsigned prefilled, unsigned length) {
     memset(&rpc_rx_buf, 0, sizeof(rpc_rx_buf));
@@ -197,6 +236,14 @@ static void exercise(const uint8_t *payload, size_t n, unsigned capacity, bool p
     }
 }
 int main(int argc, char **argv) {
+    if (argc > 1 && !strcmp(argv[1], "--encode-failure-regression-only")) {
+        exercise_encoding_failure();
+        return 0;
+    }
+    if (argc > 1 && !strcmp(argv[1], "--ownership-regression-only")) {
+        exercise_ownership();
+        return 0;
+    }
     if (argc > 1 && !strcmp(argv[1], "--rx-regression-only")) {
         exercise_rx(20, 20);
         return 0;
@@ -207,6 +254,7 @@ int main(int argc, char **argv) {
     exercise(payload, 90, 64, false);
     if (argc > 1)
         return 0;
+    exercise_encoding_failure();
     for (unsigned n = 0; n <= sizeof(payload); n++)
         exercise(payload, n, 64, false);
     for (unsigned i = 0; i < sizeof(payload); i++)
@@ -226,7 +274,9 @@ int main(int argc, char **argv) {
     for (unsigned prefilled = 0; prefilled <= 30; prefilled++)
         for (unsigned length = 0; length <= 128; length++)
             exercise_rx(prefilled, length);
+    exercise_ownership();
     puts("PASS: exact-full EOF, full-ring SOF, escaped/chunked payloads and BLE flush threshold");
     puts("PASS: saturated RX wakes/yields to decoder; all bytes retained across 30-byte ring");
+    puts("PASS: encoding failure releases transport lock; inactive profile requests cannot enter RX");
     return 0;
 }

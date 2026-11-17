@@ -273,10 +273,6 @@ int ss_discard(struct ss_engine *e) {
     }
     memcpy(e->live, e->saved, sizeof(e->live));
     memset(e->dirty, 0, sizeof(e->dirty));
-    for (unsigned l = 0; l < e->layer_count; l++)
-        for (unsigned s = 0; s < e->sensor_count; s++)
-            if (e->incompatible[l][s])
-                e->dirty[l][s] = true;
     changed(e);
     unlock(e);
     return SS_OK;

@@ -1,4 +1,4 @@
-name: Validate local sensor experiment
+name: Validate sensor module
 
 on:
   push:
@@ -38,8 +38,8 @@ jobs:
           path: _deps/nanopb
       - name: Verify integration patches and canonical schema
         run: python scripts/check_patches.py --zmk _deps/zmk --messages _deps/messages
-      - name: Check historical draft contract
-        run: python scripts/check_contract.py --upstream-proto _deps/messages/proto/zmk
+      - name: Check west-module storage compatibility and incremental builds
+        run: python scripts/test_storage_signature.py
       - name: Prepare pinned Studio TX compatibility patch
         working-directory: _deps/zmk
         run: git apply ../../zephyr/patches/zmk/studio-rpc-tx-backpressure.patch
