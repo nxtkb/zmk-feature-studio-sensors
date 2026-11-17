@@ -49,12 +49,12 @@
   前两个保持原值，保存后用新客户端重新发现并读取成功。新 behavior 仅来自固件 catalog/context，没有 App 专用分支。
   普通 Studio catalog/传输外壳为测试端口，sensor 业务及 codec 执行真实生产 C。截图已人工检查。
 - 官方固定 ZMK 的 Sweep Pro 带屏左手（含既有 Codex USB/BLE）构建通过；另一个 Ferris Sweep
-  `cradio_left` 零传感器配置、启用同一模块的构建通过。左手 FLASH 473132 B / RAM 218418 B，
+  `cradio_left` 零传感器配置、启用同一模块的构建通过。收发兼容修复版左手 FLASH 473180 B / RAM 218418 B，
   零传感器 FLASH 273140 B / RAM 97806 B；左手 RAM 使用率 83.32%，后续扩充需继续检查预算。两者均为编译验证。
 - 当前模块核心与消息补丁均对固定官方基线检查可应用。显示屏 USB 供电与 Codex USB HID 补丁未混入 sensor 补丁。
 
 以上是宿主和构建阶段的记录。后续已刷入实体带屏左手；实机读写、输入链路和传输问题见下文。
-实体旋转、分体传感器、保存/掉电、升级及第三方客户端互操作尚未完整验收。
+本轮实机结果限于左旋钮；分体右旋钮、升级及第三方客户端互操作尚未完整验收。
 
 ## 板级接入与自用步骤
 
@@ -66,7 +66,7 @@ Sweep Pro 的可选 `sweep_studio_sensors` shield 当前声明 ID 17/29，stable
 
 本地自用包与校验和保存在 `nxtkb-app/artifacts/studio-sensors-local-0.1/`。
 
-1. 使用固定官方 ZMK 的隔离 checkout，应用 display USB 供电补丁和需要的 Codex HID 补丁，再应用本模块补丁清单的全部条目（sensor 核心、messages、Studio TX 兼容修复）。
+1. 使用固定官方 ZMK 的隔离 checkout，应用 display USB 供电补丁和需要的 Codex HID 补丁，再应用本模块补丁清单的全部条目（sensor 核心、messages、Studio 收发缓冲区兼容修复）。
    Sweep Pro 必须从 ZMK west 工作区构建；完整基础命令见 `Sweep-Pro/docs/en/local-build.md`。
 2. extra modules 加入本模块和匹配的 messages checkout；snippets 加 `studio-sensors-local`；
    Sweep Pro shields 可加 `sweep_studio_sensors`。不要改用旧 fork 叠加相同补丁。
@@ -91,7 +91,20 @@ Sweep Pro 的可选 `sweep_studio_sensors` shield 当前声明 ID 17/29，stable
 - BLE 完整读取 7 层、ID 17/29 的旋钮描述与绑定成功；临时写入只改变目标旋钮参数，普通键、布局及其他绑定保持一致。
 - 荣耀曾显示 HOGP 连接但未创建输入设备。只关闭再开启 Sweep Pro 的“输入设备”配置后，Keyboard/Mouse 设备与 UHID fd 正常出现；未删除配对。
 - 之后测试还遇到 USB 输出路径与一次重启：代际变化，未保存的 A 恢复 stock。改用纯蓝牙并重新写入后，系统实际捕获到 Q 和 8 对旋钮生成的 A 事件。
-- 硬件诊断验证 Discard 恢复全部原 sensor 绑定，普通按键未改；随后实机捕获到 8 对 A 和 8 对 B，双方向字母动作已验证；保存和断电验证仍在进行。
+- 硬件诊断验证 Discard 恢复全部原 sensor 绑定，普通按键未改；随后实机捕获到 8 对 A 和 8 对 B，双方向字母动作已验证。
 - 实机反复回读出现完整 protobuf 内容缺少 EOF，已通过原版生产 TX 函数的负向对照复现，并加入独立兼容补丁。
-  详细证据、修复范围和测试见 [Studio TX backpressure](studio-tx-backpressure.md)。补丁后固件仍需重新刷写实测。
+  随后的试用暴露 RX 环满时生产者不让出线程的问题；两项修复均已加入生产 C 负向对照与边界测试。
+  详细证据、修复范围和测试见 [Studio buffer compatibility](studio-tx-backpressure.md)。
+- 收发修复版 `3378c2b` 已刷入同一左手。荣耀上的真实生产 BLE/Studio 客户端写入 A/B、保存、远程回读，
+  再连续三轮完整读取全部成功。该轮共 7 次完整读取、376 次请求、379 帧 / 37316 字节，
+  无错误、解码器残留 0，代际不变且最终 clean；耗时 88.768 秒（包含等待物理解锁）。
+  这不是射频压力或长期可靠性测试。
+- 用户拔除 USB 并关闭/重新开启左手电池后，客户端确认新代际、相同拓扑、全部已保存绑定一致且 clean，
+  A/B 掉电保留通过。随后恢复原音量减/加并保存，远程核对全部 14 个 sensor 绑定与最初备份一致，
+  普通 keymap 也与刷写前备份一致。该轮 110 次请求、112 帧 / 11378 字节，无错误或残留帧，耗时 24.175 秒。
+- 原 Consumer 音量绑定恢复后，用户仍报告荣耀双方向均无响应，短时内核事件观察也没有音量事件。
+  荣耀的 Sweep Pro 输入设备能力及 `Generic.kl` 均声明音量键支持；尚不能将问题归因于键值不被识别。
+  当前固件使用 `CONFIG_ZMK_HID_CONSUMER_REPORT_USAGES_FULL=y`，
+  [官方文档](https://zmk.dev/docs/config/system#hid) 提醒 FULL 存在部分主机兼容性问题，BASIC 兼容范围更广。
+  这是下一项独立对照假设，尚未通过切换报告格式验证；本轮未改 HID 格式或清除配对。
 - 本轮持续维持正式发布隔离，未向上游提交。

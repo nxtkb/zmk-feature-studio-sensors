@@ -64,3 +64,16 @@ prefix plus another 20-byte ATT write reproduces the pinned producer's zero-spac
 spin. The fixed callback retains all bytes for every starting occupancy 0–30 and
 incoming write length 0–128. The transmit negative control and boundary cases
 remain part of the same test; a fresh hardware retest is still required.
+
+## Combined-patch hardware retest
+
+The image built with module commit `3378c2b` was flashed to the same Sweep Pro
+left half with display. The Honor Android 16 test used the production App BLE
+controller and Studio client: change the left encoder to A/B, remotely read it,
+Save, remotely read it again, then perform three additional full reads.
+All assertions passed: 7 full keymap reads, 376 requests, 379 received frames /
+37316 bytes, no error and zero buffered decoder bytes at completion. The boot
+generation remained unchanged and the device ended with no unsaved changes.
+The test took 88.768 seconds, including waiting for the physical Studio unlock.
+This verifies the previously failing path on this connection; it is not a
+long-duration radio stress or disconnect-recovery qualification.
