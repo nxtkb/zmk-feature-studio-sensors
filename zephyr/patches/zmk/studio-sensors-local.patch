@@ -410,7 +410,7 @@ index cc605ac4..f0db8969 100644
              binding, event, zmk_sensors_get_config_at_index(sensor_index), channel_data_size,
              channel_data);
 diff --git a/app/src/physical_layouts.c b/app/src/physical_layouts.c
-index ba21ae31..e69928b6 100644
+index ba21ae31..b46074e4 100644
 --- a/app/src/physical_layouts.c
 +++ b/app/src/physical_layouts.c
 @@ -20,6 +20,7 @@
@@ -421,26 +421,14 @@ index ba21ae31..e69928b6 100644
  #include <zmk/physical_layouts.h>
  #include <zmk/event_manager.h>
  #include <zmk/events/position_state_changed.h>
-@@ -331,7 +332,7 @@ int zmk_physical_layouts_get_selected_to_stock_position_map(uint32_t const **map
-     return ZMK_KEYMAP_LEN;
- }
- 
--int zmk_physical_layouts_select_layout(const struct zmk_physical_layout *dest_layout) {
-+static int ss_local_select_layout(const struct zmk_physical_layout *dest_layout) {
-     if (!dest_layout) {
-         return -ENODEV;
+@@ -376,6 +377,10 @@ int zmk_physical_layouts_select_layout(const struct zmk_physical_layout *dest_la
+         kscan_enable_callback(active->kscan);
      }
-@@ -379,6 +380,13 @@ int zmk_physical_layouts_select_layout(const struct zmk_physical_layout *dest_la
+ 
++#if !IS_ENABLED(CONFIG_ZMK_SPLIT) || IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
++    zmk_keymap_sensors_changed();
++#endif
++
      return 0;
  }
  
-+int zmk_physical_layouts_select_layout(const struct zmk_physical_layout *layout) {
-+    int ret = ss_local_select_layout(layout);
-+    if (ret >= 0)
-+        zmk_keymap_sensors_changed();
-+    return ret;
-+}
-+
- int zmk_physical_layouts_select(uint8_t index) {
-     if (index >= ARRAY_SIZE(layouts)) {
-         return -EINVAL;

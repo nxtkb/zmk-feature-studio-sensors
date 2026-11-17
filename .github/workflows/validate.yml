@@ -52,3 +52,37 @@ jobs:
         run: python scripts/build_host.py --nanopb _deps/nanopb --messages _deps/messages/proto/zmk
       - name: Test runtime and persistence failure handling
         run: python scripts/test_runtime.py
+
+  firmware:
+    runs-on: ubuntu-latest
+    container:
+      image: docker.io/zmkfirmware/zmk-build-arm:4.1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shield: corne_left
+            snippets: -S studio-rpc-usb-uart -S studio-sensors-local
+          - shield: corne_right
+            snippets: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: workspace/zmk-feature-studio-sensors
+          persist-credentials: false
+      - name: Initialize pinned workspace
+        working-directory: workspace
+        run: |
+          mkdir config
+          cp zmk-feature-studio-sensors/tests/firmware/* config/
+          west init -l config
+          west update --fetch-opt=--filter=tree:0
+          west patch -sm zmk-feature-studio-sensors apply
+          west zephyr-export
+      - name: Build zero-sensor central or split peripheral
+        working-directory: workspace
+        run: >-
+          west build -s zmk/app -d build -b nice_nano//zmk ${{ matrix.snippets }} --
+          -DSHIELD=${{ matrix.shield }}
+          -DZMK_CONFIG=${GITHUB_WORKSPACE}/workspace/config
+          -DZMK_EXTRA_MODULES=${GITHUB_WORKSPACE}/workspace/zmk-feature-studio-sensors
