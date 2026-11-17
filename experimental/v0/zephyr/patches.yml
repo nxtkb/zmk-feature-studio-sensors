@@ -1,0 +1,27 @@
+patches:
+  - path: zmk/zmk-studio-encoders.patch
+    sha256sum: 901d1d6178040eff9643af2d6ca4b3c33794d6451f17e9a568b076fd0f74f361
+    module: zmk
+    author: NXTKB
+    email: sky_io@outlook.com
+    date: 2026-11-17
+    upstreamable: true
+    apply-command: git apply
+    comments: |
+      EXPERIMENTAL prototype v0, NOT a stable or allocated Studio protocol.
+      For official ZMK 4de31336 and
+      zmk-studio-messages 6cb4c28. Apply both patches together only for
+      explicit prototype testing. See docs/prototype-audit.md.
+  - path: zmk-studio-messages/studio-encoders-protocol.patch
+    sha256sum: c2b112b5e2f8095d823790fb01f660291858805614f527e01c09612dcca0955d
+    module: zmk-studio-messages
+    author: NXTKB
+    email: sky_io@outlook.com
+    date: 2026-11-17
+    upstreamable: true
+    apply-command: git apply
+    comments: |
+      EXPERIMENTAL prototype v0, NOT a stable or allocated Studio protocol.
+      For official ZMK 4de31336 and
+      zmk-studio-messages 6cb4c28. Apply both patches together only for
+      explicit prototype testing. See docs/prototype-audit.md.

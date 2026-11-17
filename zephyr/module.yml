@@ -1,0 +1,7 @@
+name: zmk-feature-studio-sensors
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    dts_root: .
+    snippet_root: .

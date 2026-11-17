@@ -1,0 +1,49 @@
+name: Validate local sensor experiment
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-and-patches:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          python -m pip install -r tests/requirements.txt
+      - uses: actions/checkout@v4
+        with:
+          repository: zmkfirmware/zmk
+          ref: 4de313367288aad5aeaa1243890e40dc813f7008
+          path: _deps/zmk
+      - uses: actions/checkout@v4
+        with:
+          repository: zmkfirmware/zmk-studio-messages
+          ref: 6cb4c283e76209d59c45fbcb218800cd19e9339d
+          path: _deps/messages
+      - uses: actions/checkout@v4
+        with:
+          repository: nanopb/nanopb
+          ref: 7307ce399b81ddcb3c3a5dc862c52d4754328d38
+          path: _deps/nanopb
+      - name: Verify integration patches and canonical schema
+        run: python scripts/check_patches.py --zmk _deps/zmk --messages _deps/messages
+      - name: Check historical draft contract
+        run: python scripts/check_contract.py --upstream-proto _deps/messages/proto/zmk
+      - name: Prepare local message integration
+        working-directory: _deps/messages
+        run: git apply ../../zephyr/patches/zmk-studio-messages/studio-sensors-local.patch
+      - name: Build the production C engine and Nanopb codec
+        run: python scripts/build_host.py --nanopb _deps/nanopb --messages _deps/messages/proto/zmk
+      - name: Test runtime and persistence failure handling
+        run: python scripts/test_runtime.py

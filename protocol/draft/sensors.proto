@@ -1,0 +1,174 @@
+// SPDX-License-Identifier: MIT
+// DESIGN DRAFT ONLY. The proposed package and field numbers are not allocated
+// by ZMK. This file has NO binding to the Studio request/response envelopes.
+syntax = "proto3";
+
+package zmk.sensors;
+
+import "keymap.proto";
+
+message Empty {}
+
+message Version {
+    uint32 major = 1;
+    uint32 minor = 2;
+}
+
+enum Operation {
+    OPERATION_UNSPECIFIED = 0;
+    DESCRIBE = 1;
+    READ_LAYER = 2;
+    SET_BINDING = 3;
+    INHERIT_BINDING = 4;
+    STUDIO_SAVE_DISCARD = 5;
+    STUDIO_RESET = 6;
+}
+
+enum SensorKind {
+    SENSOR_KIND_UNSPECIFIED = 0;
+    RELATIVE_ROTARY = 1;
+}
+
+enum BindingContext {
+    BINDING_CONTEXT_UNSPECIFIED = 0;
+    KEY = 1;
+    SENSOR = 2;
+}
+
+enum ParameterRole {
+    PARAMETER_ROLE_UNSPECIFIED = 0;
+    CLOCKWISE_ACTION = 1;
+    COUNTERCLOCKWISE_ACTION = 2;
+}
+
+enum SaveGuarantee {
+    SAVE_GUARANTEE_UNSPECIFIED = 0;
+    STUDIO_BEST_EFFORT = 1;
+    SNAPSHOT_ATOMIC = 2;
+}
+
+// Runtime state identity. Revision is scoped by generation, not a global clock.
+message StateToken {
+    bytes generation = 1;
+    bytes topology = 2;
+    uint32 revision = 3;
+}
+
+message SensorDescriptor {
+    optional uint32 sensor_id = 1;
+    // Board-declared durable logical identity; absent => no automatic migration.
+    optional string stable_key = 2;
+    string display_name = 3;
+    SensorKind kind = 4;
+    // Optional ordinary key position in the active physical layout. Zero is valid.
+    optional uint32 press_key_position = 5;
+    bool writable = 6;
+    bool supports_inherit = 7;
+}
+
+message ParameterPresentation {
+    // Existing BehaviorBinding parameter number: 1 or 2.
+    uint32 parameter_number = 1;
+    ParameterRole role = 2;
+}
+
+// Additive facts about existing behavior IDs. Parameter constraints still come
+// from the Studio behavior catalog; this does not define a second catalog.
+message BehaviorSupport {
+    sint32 behavior_id = 1;
+    repeated BindingContext contexts = 2;
+    repeated ParameterPresentation parameters = 3;
+}
+
+message Limits {
+    uint32 max_sensors = 1;
+    uint32 max_name_bytes = 2;
+    uint32 max_response_bytes = 3;
+}
+
+message ServiceInfo {
+    string protocol_id = 1;
+    Version version = 2;
+    repeated Operation operations = 3;
+    // Presentation order only; writes NEVER address elements by this index.
+    repeated SensorDescriptor sensors = 4;
+    repeated BehaviorSupport behavior_support = 5;
+    Limits limits = 6;
+    StateToken state = 7;
+    SaveGuarantee save_guarantee = 8;
+}
+
+message DescribeRequest {}
+
+message ReadLayerRequest {
+    optional uint32 layer_id = 1;
+    StateToken expected_state = 2;
+}
+
+message SensorBinding {
+    optional uint32 sensor_id = 1;
+    oneof value {
+        zmk.keymap.BehaviorBinding behavior = 2;
+        Empty inherit = 3;
+    }
+}
+
+message ReadLayerResult {
+    optional uint32 layer_id = 1;
+    repeated SensorBinding bindings = 2;
+    StateToken state = 3;
+    bool has_unsaved_changes = 4;
+}
+
+message SetBindingRequest {
+    optional uint32 layer_id = 1;
+    SensorBinding binding = 2;
+    StateToken expected_state = 3;
+}
+
+message SetBindingResult {
+    optional uint32 layer_id = 1;
+    SensorBinding binding = 2;
+    StateToken state = 3;
+    bool has_unsaved_changes = 4;
+}
+
+enum ErrorCode {
+    ERROR_UNSPECIFIED = 0;
+    INVALID_REQUEST = 1;
+    INVALID_SENSOR = 2;
+    INVALID_LAYER = 3;
+    INVALID_BEHAVIOR = 4;
+    INVALID_PARAMETERS = 5;
+    NOT_SUPPORTED = 6;
+    STATE_CONFLICT = 7;
+    LOCK_REQUIRED = 8;
+    PERSISTENCE_FAILED = 9;
+    NO_SPACE = 10;
+}
+
+message Error {
+    ErrorCode code = 1;
+}
+
+message Request {
+    oneof request {
+        DescribeRequest describe = 1;
+        ReadLayerRequest read_layer = 2;
+        SetBindingRequest set_binding = 3;
+    }
+}
+
+message Response {
+    oneof result {
+        ServiceInfo described = 1;
+        ReadLayerResult layer = 2;
+        SetBindingResult binding = 3;
+        Error error = 4;
+    }
+}
+
+// Proposed integration with keymap notifications; the envelope tag is TBD.
+message StateChanged {
+    StateToken state = 1;
+}

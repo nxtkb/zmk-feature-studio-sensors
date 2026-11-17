@@ -1,0 +1,8 @@
+zmk.sensors.StateToken.generation max_size:16 fixed_length:true
+zmk.sensors.StateToken.topology max_size:16 fixed_length:true
+zmk.sensors.SensorDescriptor.stable_key max_size:40
+zmk.sensors.SensorDescriptor.display_name max_size:64
+zmk.sensors.BehaviorSupport.contexts max_count:2
+zmk.sensors.BehaviorSupport.parameters max_count:2
+zmk.sensors.ServiceInfo.protocol_id max_size:64
+zmk.sensors.ServiceInfo.operations max_count:6

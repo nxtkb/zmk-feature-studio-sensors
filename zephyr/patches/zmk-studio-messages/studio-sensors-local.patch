@@ -1,0 +1,238 @@
+diff --git a/proto/zmk/keymap.proto b/proto/zmk/keymap.proto
+index 103bbf7..d0ff836 100644
+--- a/proto/zmk/keymap.proto
++++ b/proto/zmk/keymap.proto
+@@ -2,6 +2,8 @@ syntax = "proto3";
+ 
+ package zmk.keymap;
+ 
++import "sensors.proto";
++
+ message Request {
+     oneof request_type {
+         bool get_keymap = 1;
+@@ -16,6 +18,7 @@ message Request {
+         RemoveLayerRequest remove_layer = 10;
+         RestoreLayerRequest restore_layer = 11;
+         SetLayerPropsRequest set_layer_props = 12;
++        zmk.sensors.Request sensors = 101;
+     }
+ }
+ 
+@@ -33,6 +36,7 @@ message Response {
+         RemoveLayerResponse remove_layer = 10;
+         RestoreLayerResponse restore_layer = 11;
+         SetLayerPropsResponse set_layer_props = 12;
++        zmk.sensors.Response sensors = 101;
+     }
+ }
+ 
+diff --git a/proto/zmk/sensors.proto b/proto/zmk/sensors.proto
+new file mode 100644
+index 0000000..7609a32
+--- /dev/null
++++ b/proto/zmk/sensors.proto
+@@ -0,0 +1,189 @@
++// SPDX-License-Identifier: MIT
++// LOCAL EXPERIMENT 0.1 ONLY. No upstream allocation or stable ABI is claimed.
++// Routed through keymap request/response field 101 on matching local firmware.
++syntax = "proto3";
++
++package zmk.sensors;
++option java_package = "com.nxtkb.protocol.sensors";
++option java_outer_classname = "Sensors";
++
++// Leaf value matching Studio BehaviorBinding semantics. It deliberately imports
++// no keymap envelope, so keymap -> sensors cannot form an import cycle.
++message BehaviorBinding {
++    sint32 behavior_id = 1;
++    uint32 param1 = 2;
++    uint32 param2 = 3;
++}
++
++message Empty {}
++
++message Version {
++    uint32 major = 1;
++    uint32 minor = 2;
++}
++
++enum Operation {
++    OPERATION_UNSPECIFIED = 0;
++    DESCRIBE = 1;
++    READ_LAYER = 2;
++    SET_BINDING = 3;
++    INHERIT_BINDING = 4;
++    STUDIO_SAVE_DISCARD = 5;
++    STUDIO_RESET = 6;
++}
++
++enum SensorKind {
++    SENSOR_KIND_UNSPECIFIED = 0;
++    RELATIVE_ROTARY = 1;
++}
++
++enum BindingContext {
++    BINDING_CONTEXT_UNSPECIFIED = 0;
++    KEY = 1;
++    SENSOR = 2;
++}
++
++enum ParameterRole {
++    PARAMETER_ROLE_UNSPECIFIED = 0;
++    CLOCKWISE_ACTION = 1;
++    COUNTERCLOCKWISE_ACTION = 2;
++}
++
++enum SaveGuarantee {
++    SAVE_GUARANTEE_UNSPECIFIED = 0;
++    STUDIO_BEST_EFFORT = 1;
++    SNAPSHOT_ATOMIC = 2;
++}
++
++// Runtime state identity. Revision is scoped by generation, not a global clock.
++message StateToken {
++    bytes generation = 1;
++    bytes topology = 2;
++    uint32 revision = 3;
++}
++
++message SensorDescriptor {
++    optional uint32 sensor_id = 1;
++    // Board-declared durable logical identity; absent => no automatic migration.
++    optional string stable_key = 2;
++    string display_name = 3;
++    SensorKind kind = 4;
++    // Optional ordinary key position in the active physical layout. Zero is valid.
++    optional uint32 press_key_position = 5;
++    bool writable = 6;
++    bool supports_inherit = 7;
++}
++
++message ParameterPresentation {
++    // Existing BehaviorBinding parameter number: 1 or 2.
++    uint32 parameter_number = 1;
++    ParameterRole role = 2;
++}
++
++// Additive facts about existing behavior IDs. Parameter constraints still come
++// from the Studio behavior catalog; this does not define a second catalog.
++message BehaviorSupport {
++    sint32 behavior_id = 1;
++    repeated BindingContext contexts = 2;
++    repeated ParameterPresentation parameters = 3;
++}
++
++message Limits {
++    uint32 max_sensors = 1;
++    uint32 max_name_bytes = 2;
++    uint32 max_response_bytes = 3;
++}
++
++message ServiceInfo {
++    string protocol_id = 1;
++    Version version = 2;
++    repeated Operation operations = 3;
++    // Presentation order only; writes NEVER address elements by this index.
++    repeated SensorDescriptor sensors = 4;
++    repeated BehaviorSupport behavior_support = 5;
++    Limits limits = 6;
++    StateToken state = 7;
++    SaveGuarantee save_guarantee = 8;
++    bool storage_incompatible = 9;
++}
++
++message DescribeRequest {}
++
++message ReadLayerRequest {
++    optional uint32 layer_id = 1;
++    StateToken expected_state = 2;
++}
++
++message SensorBinding {
++    optional uint32 sensor_id = 1;
++    oneof value {
++        BehaviorBinding behavior = 2;
++        Empty inherit = 3;
++    }
++}
++
++message ReadLayerResult {
++    optional uint32 layer_id = 1;
++    repeated SensorBinding bindings = 2;
++    StateToken state = 3;
++    bool has_unsaved_changes = 4;
++}
++
++message SetBindingRequest {
++    optional uint32 layer_id = 1;
++    SensorBinding binding = 2;
++    StateToken expected_state = 3;
++}
++
++message SetBindingResult {
++    optional uint32 layer_id = 1;
++    SensorBinding binding = 2;
++    StateToken state = 3;
++    bool has_unsaved_changes = 4;
++}
++
++enum ErrorCode {
++    ERROR_UNSPECIFIED = 0;
++    INVALID_REQUEST = 1;
++    INVALID_SENSOR = 2;
++    INVALID_LAYER = 3;
++    INVALID_BEHAVIOR = 4;
++    INVALID_PARAMETERS = 5;
++    NOT_SUPPORTED = 6;
++    STATE_CONFLICT = 7;
++    LOCK_REQUIRED = 8;
++    PERSISTENCE_FAILED = 9;
++    NO_SPACE = 10;
++}
++
++message Error {
++    ErrorCode code = 1;
++}
++
++message Request {
++    oneof request {
++        DescribeRequest describe = 1;
++        ReadLayerRequest read_layer = 2;
++        SetBindingRequest set_binding = 3;
++    }
++}
++
++message Response {
++    oneof result {
++        ServiceInfo described = 1;
++        ReadLayerResult layer = 2;
++        SetBindingResult binding = 3;
++        Error error = 4;
++    }
++}
++
++// Proposed integration with keymap notifications; the envelope tag is TBD.
++message StateChanged {
++    StateToken state = 1;
++}
++
++// Client-local cache representation, not a Studio operation.
++message Snapshot {
++    ServiceInfo info = 1;
++    repeated ReadLayerResult layers = 2;
++}
+diff --git a/proto/zmk/sensors.options b/proto/zmk/sensors.options
+new file mode 100644
+index 0000000..71c85ca
+--- /dev/null
++++ b/proto/zmk/sensors.options
+@@ -0,0 +1,8 @@
++zmk.sensors.StateToken.generation max_size:16 fixed_length:true
++zmk.sensors.StateToken.topology max_size:16 fixed_length:true
++zmk.sensors.SensorDescriptor.stable_key max_size:40
++zmk.sensors.SensorDescriptor.display_name max_size:64
++zmk.sensors.BehaviorSupport.contexts max_count:2
++zmk.sensors.BehaviorSupport.parameters max_count:2
++zmk.sensors.ServiceInfo.protocol_id max_size:64
++zmk.sensors.ServiceInfo.operations max_count:6

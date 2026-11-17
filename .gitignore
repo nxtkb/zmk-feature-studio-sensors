@@ -1,0 +1,5 @@
+__pycache__/
+build/
+_deps/
+.venv/
+.DS_Store

@@ -1,0 +1,19 @@
+description: Local Studio sensor descriptors, in keymap sensor device order
+compatible: "nxtkb,studio-sensors"
+properties:
+  sensor-ids:
+    type: array
+    required: true
+  sensor-keys:
+    type: string-array
+    required: true
+  sensor-names:
+    type: string-array
+    required: true
+  sensor-kinds:
+    type: array
+    required: true
+  press-positions:
+    description: Stock key positions; 0xffffffff means no press association
+    type: array
+    required: true

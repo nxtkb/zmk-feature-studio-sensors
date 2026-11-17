@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: MIT */
+#pragma once
+#include <stdint.h>
+static const uint8_t ss_build_signature[16] = { @SS_SIGNATURE@ };
